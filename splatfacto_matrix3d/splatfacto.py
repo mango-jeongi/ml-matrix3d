@@ -41,10 +41,16 @@ from torch.nn import Parameter
 
 from nerfstudio.cameras.camera_optimizers import CameraOptimizer, CameraOptimizerConfig
 from nerfstudio.cameras.cameras import Cameras
-from nerfstudio.data.scene_box import OrientedBox
+try:
+    from nerfstudio.data.scene_box import OrientedBox
+except ImportError:
+    from nerfstudio.data.scene_box import SceneBox as OrientedBox
 from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes, TrainingCallbackLocation
 from nerfstudio.engine.optimizers import Optimizers
-from nerfstudio.model_components.lib_bilagrid import BilateralGrid, color_correct, slice, total_variation_loss
+try:
+    from nerfstudio.model_components.lib_bilagrid import BilateralGrid, color_correct, slice, total_variation_loss
+except ImportError:
+    BilateralGrid, color_correct, slice, total_variation_loss = None, None, None, None
 from nerfstudio.model_components.losses import DepthLossType, depth_loss, depth_ranking_loss
 from nerfstudio.models.base_model import Model, ModelConfig
 from nerfstudio.models.splatfacto import SplatfactoModel
@@ -366,8 +372,7 @@ class SplatfactoModel_Matrix3D(Model):
             )
 
         # Strategy for GS densification
-        # self.strategy = DefaultStrategy(
-        self.strategy = Matrix3DtStrategy(
+        self.strategy = DefaultStrategy(
             prune_opa=self.config.cull_alpha_thresh,
             grow_grad2d=self.config.densify_grad_thresh,
             grow_scale3d=self.config.densify_size_thresh,
@@ -379,11 +384,7 @@ class SplatfactoModel_Matrix3D(Model):
             refine_stop_iter=self.config.stop_split_at,
             reset_every=self.config.reset_alpha_every * self.config.refine_every,
             refine_every=self.config.refine_every,
-            # pause_refine_after_reset=self.num_train_data + self.config.refine_every,
-            pause_refine_after_reset=0,
             absgrad=self.config.use_absgrad,
-            revised_opacity=True,
-            verbose=True,
         )
         self.strategy_state = self.strategy.initialize_state(scene_scale=1.0)
 
@@ -676,7 +677,7 @@ class SplatfactoModel_Matrix3D(Model):
         if self.config.rasterize_mode not in ["antialiased", "classic"]:
             raise ValueError("Unknown rasterize_mode: %s", self.config.rasterize_mode)
 
-        if self.config.output_depth_during_training or not self.training:
+        if self.config.output_depth_during_training or not self.training or self.config.depth_l1_lambda > 0 or self.config.depth_ranking_lambda > 0:
             render_mode = "RGB+ED"
         else:
             render_mode = "RGB"

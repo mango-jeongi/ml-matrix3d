@@ -35,22 +35,35 @@ from pathlib import Path
 from typing import Dict, ForwardRef, Generic, List, Literal, Optional, Tuple, Type, Union, cast, get_args, get_origin
 
 import cv2
-import fpsample
+try:
+    import fpsample
+except ImportError:
+    fpsample = None
 import numpy as np
 import torch
 from rich.progress import track
 from torch.nn import Parameter
 from typing_extensions import assert_never
 
-from nerfstudio.cameras.camera_utils import fisheye624_project, fisheye624_unproject_helper
+try:
+    from nerfstudio.cameras.camera_utils import fisheye624_project, fisheye624_unproject_helper
+except ImportError:
+    fisheye624_project = None
+    fisheye624_unproject_helper = None
 from nerfstudio.cameras.cameras import Cameras, CameraType
 from nerfstudio.configs.dataparser_configs import AnnotatedDataParserUnion
 from nerfstudio.data.datamanagers.base_datamanager import DataManager, DataManagerConfig, TDataset
-from nerfstudio.data.datamanagers.full_images_datamanager import FullImageDatamanagerConfig
+try:
+    from nerfstudio.data.datamanagers.full_images_datamanager import FullImageDatamanagerConfig
+except ImportError:
+    FullImageDatamanagerConfig = DataManagerConfig
 from nerfstudio.data.dataparsers.base_dataparser import DataparserOutputs
 from nerfstudio.data.dataparsers.nerfstudio_dataparser import NerfstudioDataParserConfig
 from nerfstudio.data.datasets.base_dataset import InputDataset
-from nerfstudio.utils.misc import get_orig_class
+try:
+    from nerfstudio.utils.misc import get_orig_class
+except ImportError:
+    get_orig_class = lambda *args, **kwargs: None
 from nerfstudio.utils.rich_utils import CONSOLE
 
 
@@ -175,6 +188,13 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
             self.random_generator.shuffle(indices)
             return indices
         elif self.config.train_cameras_sampling_strategy == "fps":
+            if fpsample is None:
+                if not hasattr(self, "random_generator"):
+                    self.random_generator = random.Random(self.config.train_cameras_sampling_seed)
+                indices = list(range(num_train_cameras))
+                self.random_generator.shuffle(indices)
+                return indices
+            
             if not hasattr(self, "train_unsampled_epoch_count"):
                 np.random.seed(self.config.train_cameras_sampling_seed)  # fix random seed of fpsample
                 self.train_unsampled_epoch_count = np.zeros(num_train_cameras)

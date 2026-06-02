@@ -4,6 +4,7 @@
 #
 from typing import Optional
 import math
+import os
 import torch
 import torch.nn as nn
 
@@ -187,11 +188,28 @@ class HolisticAttnProcessor:
             key_pos_r, _ = padded_to_packed(key_pos_r, seqlen_kv)
             k = FeaturePositionalEncoding.apply_rotary_emb(k, key_pos_r)
 
-        x = xops.memory_efficient_attention(
-            q, k, v,
-            attn_bias=xops.fmha.attn_bias.BlockDiagonalMask.from_seqlens(seqlen_q, seqlen_kv), 
-            p=attn.attn_drop.p if attn.training and hasattr(attn, 'attn_drop') else 0.,
-        )
+        try:
+            if os.environ.get("XFORMERS_DISABLED") == "1":
+                raise ImportError("xformers disabled")
+            x = xops.memory_efficient_attention(
+                q, k, v,
+                attn_bias=xops.fmha.attn_bias.BlockDiagonalMask.from_seqlens(seqlen_q, seqlen_kv), 
+                p=attn.attn_drop.p if attn.training and hasattr(attn, 'attn_drop') else 0.,
+            )
+        except (ImportError, NotImplementedError, RuntimeError):
+            from torch.nn.functional import scaled_dot_product_attention
+            # xformers (B, N, H, D) -> native (B, H, N, D)
+            q = q.transpose(1, 2)
+            k = k.transpose(1, 2)
+            v = v.transpose(1, 2)
+            # Use native SDPA which is architecture-agnostic
+            x = scaled_dot_product_attention(
+                q, k, v,
+                dropout_p=attn.attn_drop.p if attn.training and hasattr(attn, 'attn_drop') else 0.,
+                is_causal=False # Matrix3D uses block diagonal mask for packing, not standard causality
+            )
+            # native (B, H, N, D) -> xformers (B, N, H, D)
+            x = x.transpose(1, 2)
         x = x.reshape(1, -1, inner_dim)
         x = attn.to_out[0](x)  # linear
         x = attn.to_out[1](x)  # dropout

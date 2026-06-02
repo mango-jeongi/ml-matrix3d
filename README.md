@@ -33,6 +33,14 @@ This repository includes the model inference pipeline and the modified 3DGS reco
   ```
   Some dependencies may require CUDA with the same version used by `torch` in your system, and the installation may not work out of the box. Please refer to their official repo for troubleshooting.
 
+### Blackwell GPU (sm_120) / Modern Stack Compatibility
+
+For newer architectures (e.g., NVIDIA Blackwell RTX 50-series `sm_120`), this fork provides optimizations and fallbacks:
+* **PyTorch & CUDA**: Compatible with PyTorch `2.10.0+cu128` and CUDA `12.8` for native Blackwell support.
+* **NumPy**: Uses `numpy < 2.0` to prevent binary compatibility errors with precompiled wheels.
+* **gsplat 1.5.3**: Fully functional with modern gsplat release standards.
+* **Native Attention Fallback**: If `xformers` versioning conflicts occur, the codebase automatically falls back to native PyTorch Scaled Dot Product Attention (SDPA) for high-performance execution.
+
 * Download the Pre-trained model:
   * Download the checkpoints: [matrix3d_512.pt](https://ml-site.cdn-apple.com/models/matrix3d/matrix3d_512.pt)
   * Create a `checkpoints` folder and put the pre-trained model into it.
